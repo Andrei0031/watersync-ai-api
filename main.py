@@ -1,24 +1,20 @@
 @app.get("/api/forecast")
 def generate_forecast(months: int = 6):
-    # 1. Generate the full timeline (history + future periods)
-    future_calendar = model.make_future_dataframe(periods=months, freq='M')
+    # 1. We tell Prophet to generate data (6 months + 1 extra month to cover April)
+    # This forces the model to calculate a prediction for the current month (April)
+    future_calendar = model.make_future_dataframe(periods=months + 1, freq='M')
     forecast = model.predict(future_calendar)
     
-    # 2. Grab the historical data rows and the future data rows separately
-    # This ensures we get exactly the last real month to anchor our chart line
-    history_count = len(model.history)
-    
-    # We take the last 1 month of history + the 6 months of future data (7 rows total)
+    # 2. Grab the tail records (we want the current month + the 6 future months = 7 rows)
     total_rows_needed = months + 1
     results = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(total_rows_needed).copy()
     
-    # 3. Clean up the dates to standard YYYY-MM formatting
+    # 3. Format dates to match your dashboard layout (YYYY-MM)
     results['ds'] = results['ds'].dt.strftime('%Y-%m') 
     
-    # 4. Apply our safety logic to ensure zero-clamping for valleys
+    # 4. Enforce our safety clamping so numbers never drop below zero
     results['yhat'] = results['yhat'].apply(lambda x: max(0.0, x))
     results['yhat_lower'] = results['yhat_lower'].apply(lambda x: max(0.0, x))
     results['yhat_upper'] = results['yhat_upper'].apply(lambda x: max(0.0, x))
     
-    # Return exactly the 7 records (1 anchor month + 6 forecast months)
     return results.to_dict(orient="records")
